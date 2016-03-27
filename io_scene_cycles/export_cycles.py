@@ -14,14 +14,15 @@ def export_cycles(fp, scene, inline_textures=False):
         'inline_textures': inline_textures
     }
 
+    root = etree.Element('cycles')
     for node in gen_scene_nodes(scene):
         if node is not None:
-            write(node, fp)
+            root.append(node)
+    write(root, fp)
 
     return {'FINISHED'}
 
 def gen_scene_nodes(scene):
-    yield write_film(scene)
     written_materials = set()
 
     yield write_material(scene.world, 'background')
@@ -37,36 +38,41 @@ def gen_scene_nodes(scene):
 
         yield  write_object(object, scene=scene)
 
+# TODO: compute sensor_size and aspectratio correctly
+# reference: blender_camera.cpp blender_camera_viewplane
+def compute_camera(camera, scene):
+    xratio = scene.render.resolution_x
+    yratio = scene.render.resolution_y
+    sensor_size = camera.sensor_width
+    aspectratio = xratio / yratio;
+    return sensor_size, aspectratio
 
 def write_camera(camera, scene):
     camera = camera.data
 
     if camera.type == 'ORTHO':
-        camera_type = 'orthogonal'
+        camera_type = 'orthographic'
     elif camera.type == 'PERSP':
         camera_type = 'perspective'
     else:
         raise Exception('Camera type %r unknown!' % camera.type)
+
+    sensor_size, aspectratio = compute_camera(camera, scene)
+    fov = 2.0 * math.atan((0.5 * sensor_size) / camera.lens / aspectratio);
 
     return etree.Element('camera', {
         'type': camera_type,
 
         # fabio: untested values. assuming to be the same as found here:
         # http://www.blender.org/documentation/blender_python_api_2_57_release/bpy.types.Camera.html#bpy.types.Camera.clip_start
+        'width': str(int(scene.render.resolution_x * scene.render.resolution_percentage / 100.0)),
+        'height': str(int(scene.render.resolution_y * scene.render.resolution_percentage / 100.0)),
+        'fov': str(math.degrees(fov)),
         'nearclip': str(camera.clip_start),
         'farclip': str(camera.clip_end),
-        'focaldistance': str(camera.dof_distance),
+        'sensorwidth': str(camera.sensor_width),
+        'sensorheight': str(camera.sensor_height),
     })
-
-
-def write_film(scene):
-    render = scene.render
-    scale = scene.render.resolution_percentage / 100.0
-    size_x = int(scene.render.resolution_x * scale)
-    size_y = int(scene.render.resolution_y * scale)
-
-    return etree.Element('film', {'width': str(size_x), 'height': str(size_y)})
-
 
 
 def write_object(object, scene):
@@ -142,6 +148,7 @@ def write_material(material, tag_name='shader'):
     #           blender        <--->     cycles
     xlate = ( ("RGB",                   "color",()),
               ("BSDF_DIFFUSE",          "diffuse_bsdf",()),
+              ("BSDF_GLOSSY",           "glossy_bsdf",()),
               ("BSDF_TRANSPARENT",      "transparent_bsdf",()),
               ("BUMP",                  "bump",()),
               ("FRESNEL",               "fresnel",()),
@@ -352,8 +359,7 @@ def wrap_in_transforms(xml_element, object):
 
     if (object.type == 'CAMERA'):
         # In cycles, the camera points at its Z axis
-        rot = mathutils.Matrix.Rotation(math.pi, 4, 'X')
-        matrix = matrix.copy() * rot
+        matrix = matrix.copy() * mathutils.Matrix.Scale(-1, 4, (0,0,1))
 
     wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(matrix.transposed()) })
     wrapper.append(xml_element)
@@ -369,7 +375,8 @@ def wrap_in_state(xml_element, object):
         return xml_element
 
     state = etree.Element('state', {
-        'shader': material.name
+        'shader': material.name,
+        'interpolation': 'smooth' # TODO: smooth/flat from object parameter?
     })
 
     state.append(xml_element)
@@ -392,7 +399,7 @@ def space_separated_matrix(matrix):
 def write(node, fp):
     # strip(node)
     s = etree.tostring(node, encoding='unicode')
-    # s = dom.parseString(s).toprettyxml()
+    s = dom.parseString(s).toprettyxml()
     fp.write(s)
     fp.write('\n')
 

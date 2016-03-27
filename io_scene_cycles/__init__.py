@@ -105,9 +105,9 @@ if __name__ == "__main__":
 bl_info = {
     "name": "Cycles XML exporter",
     "description": "Exports the scene to the standalone Cycles renderer's XML format (you only need this if you are using Cycles standalone.",
-    "author": "Fábio Santos, TODO who else?",
-    "version": (0, 1),
-    "blender": (2, 69, 0),
+    "author": "Fábio Santos, Tianqian Zhu",
+    "version": (0, 2),
+    "blender": (2, 74, 0),
     "location": "File > Import-Export",
     "warning": "", # used for warning icon and text in addons panel
     "wiki_url": "", # "http://wiki.blender.org/index.php/TODO
