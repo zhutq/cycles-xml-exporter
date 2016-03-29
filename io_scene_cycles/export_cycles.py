@@ -41,10 +41,31 @@ def gen_scene_nodes(scene):
 # TODO: compute sensor_size and aspectratio correctly
 # reference: blender_camera.cpp blender_camera_viewplane
 def compute_camera(camera, scene):
-    xratio = scene.render.resolution_x
-    yratio = scene.render.resolution_y
-    sensor_size = camera.sensor_width
-    aspectratio = xratio / yratio;
+    width = scene.render.resolution_x * scene.render.resolution_percentage / 100.0
+    height = scene.render.resolution_y * scene.render.resolution_percentage / 100.0
+    xratio = width * scene.render.pixel_aspect_x
+    yratio = height * scene.render.pixel_aspect_y
+    if camera.sensor_fit == 'AUTO':
+        horizontal_fit = (xratio > yratio)
+        sensor_size = camera.sensor_width
+    elif camera.sensor_fit == 'HORIZONTAL':
+        horizontal_fit = True
+        sensor_size = camera.sensor_width
+    else:
+        horizontal_fit = False
+        sensor_size = camera.sensor_height
+    if horizontal_fit:
+        aspectratio = xratio / yratio
+        xaspect = aspectratio
+        yaspect = 1.0
+    else:
+        aspectratio = yratio / xratio
+        xaspect = 1.0
+        yaspect = aspectratio
+    if camera.type == 'ORTHO':
+        xaspect = xaspect * camera.ortho_scale / (aspectratio * 2.0)
+        yaspect = yaspect * camera.ortho_scale / (aspectratio * 2.0)
+        aspectratio = camera.ortho_scale / 2.0
     return sensor_size, aspectratio
 
 def write_camera(camera, scene):
@@ -54,7 +75,7 @@ def write_camera(camera, scene):
         camera_type = 'orthographic'
     elif camera.type == 'PERSP':
         camera_type = 'perspective'
-    else:
+    else: # TODO: 'PANO'
         raise Exception('Camera type %r unknown!' % camera.type)
 
     sensor_size, aspectratio = compute_camera(camera, scene)
