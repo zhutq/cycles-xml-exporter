@@ -38,7 +38,6 @@ def gen_scene_nodes(scene):
 
         yield  write_object(object, scene=scene)
 
-# TODO: compute sensor_size and aspectratio correctly
 # reference: blender_camera.cpp blender_camera_viewplane
 def compute_camera(camera, scene):
     width = scene.render.resolution_x * scene.render.resolution_percentage / 100.0
@@ -396,9 +395,20 @@ def wrap_in_state(xml_element, object):
         return xml_element
 
     state = etree.Element('state', {
-        'shader': material.name,
-        'interpolation': 'smooth' # TODO: smooth/flat from object parameter?
+        'shader': material.name
     })
+
+    # Trying to handle bpy.ops.object.shade_smooth/shade_flat.
+    # The flag is specified per-polygon and can be retrieved by
+    #     bpy.data.objects['ObjectName'].data.polygons[0].use_smooth
+    # However, it seems that cycles xml api does not support per-polygon smoothness spec:
+    #     "smooth" is handled per state, see static void xml_read_state(XMLReadState& state, pugi::xml_node node) (cycles_xml.cpp)
+    #     mesh xml does not contain normal spec, see static void xml_read_mesh(const XMLReadState& state, pugi::xml_node node) (cycles_xml.cpp)
+    # So for now, use smooth for all mesh
+    if object.type == 'MESH':
+        state.set('interpolation', 'smooth')
+
+    # create_mesh
 
     state.append(xml_element)
 
